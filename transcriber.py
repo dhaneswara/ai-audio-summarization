@@ -39,3 +39,23 @@ class Transcriber:
                 self.model_size, device="cpu", compute_type="int8"
             )
             self.device = "cpu"
+
+    def transcribe(self, audio_path: str) -> TranscriptionResult:
+        self._load()
+        assert self._model is not None
+        segments_iter, info = self._model.transcribe(audio_path)
+        segments = list(segments_iter)
+        text = " ".join(s.text.strip() for s in segments).strip()
+        return TranscriptionResult(text=text, language=info.language, segments=segments)
+
+    def unload(self) -> None:
+        if self._model is None:
+            return
+        del self._model
+        self._model = None
+        try:
+            import torch
+
+            torch.cuda.empty_cache()
+        except (ImportError, RuntimeError):
+            pass

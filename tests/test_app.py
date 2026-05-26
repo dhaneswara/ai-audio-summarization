@@ -171,6 +171,35 @@ def test_run_pipeline_surfaces_transcriber_errors():
     summarizer.summarize.assert_not_called()
 
 
+def test_run_pipeline_transcribe_only_skips_summarization():
+    """When transcribe_only=True, return the transcript without calling summarize()."""
+    from app import run_pipeline
+    from transcriber import TranscriptionResult
+
+    transcriber = MagicMock()
+    transcriber.transcribe.return_value = TranscriptionResult(
+        text="just the words", language="en", segments=[]
+    )
+    summarizer = MagicMock()
+
+    transcript, summary = _drain(
+        run_pipeline(
+            "fake.wav",
+            style="bullets",
+            length="medium",
+            transcriber=transcriber,
+            summarizer=summarizer,
+            transcribe_only=True,
+        )
+    )
+
+    assert transcript == "just the words"
+    assert "skipped" in summary.lower() or "transcription complete" in summary.lower()
+    transcriber.transcribe.assert_called_once_with("fake.wav")
+    transcriber.unload.assert_called_once()
+    summarizer.summarize.assert_not_called()
+
+
 def test_run_pipeline_yields_progress_between_stages():
     """The pipeline yields 'Transcribing…' then 'Summarizing…' (with transcript) before the final result."""
     from app import run_pipeline

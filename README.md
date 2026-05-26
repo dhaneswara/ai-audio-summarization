@@ -30,6 +30,8 @@ python app.py
 
 Open the URL Gradio prints (typically http://127.0.0.1:7860). Upload an audio file, pick a summary style and length, and click **Transcribe & Summarize**.
 
+Tick **Transcribe only (skip summary)** if you just want the transcript — handy for sanity-checking what the model heard before trusting any summary built from it.
+
 Supported formats: `.mp3`, `.wav`, `.m4a`, `.mp4`, `.webm`, `.ogg`, `.flac`.
 
 ## How it works

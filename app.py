@@ -14,12 +14,15 @@ def run_pipeline(
     length: str,
     transcriber: Transcriber,
     summarizer: Summarizer,
+    transcribe_only: bool = False,
 ) -> Generator[tuple[str, str], None, None]:
-    """Transcribe an audio file, unload the model, then summarize.
+    """Transcribe an audio file, unload the model, then optionally summarize.
 
     Yields intermediate (transcript, status) tuples while progressing, and a
-    final (transcript, summary) when complete. Transcriber and summarizer
-    errors are caught and surfaced as user-facing text so the UI never crashes.
+    final (transcript, summary) when complete. When transcribe_only is True
+    the summarization step is skipped — useful for verifying the transcript
+    against an audio source. Transcriber and summarizer errors are caught and
+    surfaced as user-facing text so the UI never crashes.
     """
     if not audio_path:
         yield "", "Please upload an audio file."
@@ -40,6 +43,10 @@ def run_pipeline(
         yield "", "No speech detected in audio."
         return
 
+    if transcribe_only:
+        yield transcript, "_Transcription complete. Summarization skipped._"
+        return
+
     yield transcript, "Summarizing…"
 
     try:
@@ -51,7 +58,12 @@ def run_pipeline(
     yield transcript, summary
 
 
-def _ui_handler(audio_path: Optional[str], style: str, length: str):
+def _ui_handler(
+    audio_path: Optional[str],
+    style: str,
+    length: str,
+    transcribe_only: bool,
+):
     """Gradio adapter: forwards run_pipeline's progress yields to the UI."""
     yield from run_pipeline(
         audio_path,
@@ -59,6 +71,7 @@ def _ui_handler(audio_path: Optional[str], style: str, length: str):
         length=length,
         transcriber=_TRANSCRIBER,
         summarizer=_SUMMARIZER,
+        transcribe_only=transcribe_only,
     )
 
 
@@ -84,6 +97,11 @@ def build_ui():
             length = gr.Dropdown(
                 ["short", "medium", "long"], value="medium", label="Summary length"
             )
+        transcribe_only = gr.Checkbox(
+            value=False,
+            label="Transcribe only (skip summary)",
+            info="Useful for verifying the transcript before generating a summary.",
+        )
         submit = gr.Button("Transcribe & Summarize", variant="primary")
         with gr.Row():
             transcript_box = gr.Textbox(
@@ -95,7 +113,7 @@ def build_ui():
             summary_box = gr.Markdown(label="Summary")
         submit.click(
             _ui_handler,
-            inputs=[audio, style, length],
+            inputs=[audio, style, length, transcribe_only],
             outputs=[transcript_box, summary_box],
         )
     return ui

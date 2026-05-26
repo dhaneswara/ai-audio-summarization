@@ -303,12 +303,21 @@ button#submit-btn:active { transform: translateY(0); }
     gap: 1rem !important;
 }
 
+#output-grid > div { min-width: 0 !important; }
+
 #transcript-pane, #summary-pane {
     background: #1a1611 !important;
     border: 1px solid #2a241d !important;
     border-radius: 6px !important;
     padding: 1.25rem !important;
-    min-height: 460px !important;
+}
+
+/* Pad the markdown content so it visually fills the same space the
+   transcript's textarea occupies, with internal scroll if needed. */
+#summary-pane .prose,
+#summary-pane [class*="prose"] {
+    max-height: 470px !important;
+    overflow-y: auto !important;
 }
 
 #transcript-pane textarea {
@@ -476,18 +485,23 @@ def build_ui():
                 elem_id="submit-btn",
             )
 
-        with gr.Row(elem_id="output-grid"):
+        with gr.Row(elem_id="output-grid", equal_height=True):
             transcript_box = gr.Textbox(
                 label="Transcript",
-                lines=22,
+                lines=18,
+                max_lines=18,
                 buttons=["copy"],
                 interactive=True,
                 placeholder="Your transcript will appear here…",
                 elem_id="transcript-pane",
             )
-            summary_box = gr.Markdown(
+            summary_box = gr.Textbox(
                 label="Summary",
-                value="*Your summary will appear here.*",
+                lines=18,
+                max_lines=18,
+                buttons=["copy"],
+                interactive=False,
+                placeholder="Your summary will appear here…",
                 elem_id="summary-pane",
             )
 

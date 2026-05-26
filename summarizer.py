@@ -115,6 +115,26 @@ class Summarizer:
             hints["details_hint"] = hints["details_hint"] + " Use bullet points where natural."
         return _FINAL_TEMPLATE.format(transcript=transcript, **hints)
 
+    def summarize(
+        self,
+        transcript: str,
+        style: Style = "bullets",
+        length: Length = "medium",
+    ) -> str:
+        chunks = self.chunk_text(transcript)
+        if len(chunks) == 1:
+            prompt = self._build_prompt(chunks[0], style=style, length=length, is_chunk=False)
+            return self._call_ollama(prompt)
+
+        partials: list[str] = []
+        for chunk in chunks:
+            prompt = self._build_prompt(chunk, style=style, length=length, is_chunk=True)
+            partials.append(self._call_ollama(prompt))
+
+        combined = "\n\n---\n\n".join(partials)
+        final_prompt = self._build_prompt(combined, style=style, length=length, is_chunk=False)
+        return self._call_ollama(final_prompt)
+
     def _call_ollama(self, prompt: str) -> str:
         url = f"{self.base_url}/api/generate"
         try:

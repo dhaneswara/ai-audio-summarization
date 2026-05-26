@@ -135,3 +135,41 @@ def test_call_ollama_raises_friendly_error_on_timeout():
         with pytest.raises(SummarizerError) as exc:
             s._call_ollama("prompt")
     assert "timed out" in str(exc.value).lower()
+
+
+def test_summarize_short_text_makes_one_ollama_call():
+    """A transcript fitting in one chunk uses a single Ollama call with the final prompt."""
+    from summarizer import Summarizer
+
+    s = Summarizer()
+    with patch.object(s, "_call_ollama", return_value="FINAL SUMMARY") as call:
+        out = s.summarize("Short transcript.", style="bullets", length="medium")
+    assert out == "FINAL SUMMARY"
+    assert call.call_count == 1
+    # The single call should use the final (not chunk) template.
+    sent_prompt = call.call_args.args[0]
+    assert "TL;DR" in sent_prompt
+
+
+def test_summarize_long_text_does_map_reduce():
+    """A transcript spanning multiple chunks calls Ollama once per chunk plus once to combine."""
+    from summarizer import Summarizer
+
+    s = Summarizer()
+    long_text = ("alpha beta gamma delta " * 5000).strip()
+
+    # First, confirm the fixture actually chunks.
+    chunks = s.chunk_text(long_text)
+    assert len(chunks) >= 2
+
+    responses = [f"partial {i}" for i in range(len(chunks))] + ["FINAL"]
+    with patch.object(s, "_call_ollama", side_effect=responses) as call:
+        out = s.summarize(long_text, style="bullets", length="medium")
+
+    assert out == "FINAL"
+    assert call.call_count == len(chunks) + 1
+    # The last call combines the partials and uses the final template.
+    final_prompt = call.call_args_list[-1].args[0]
+    assert "TL;DR" in final_prompt
+    for i in range(len(chunks)):
+        assert f"partial {i}" in final_prompt

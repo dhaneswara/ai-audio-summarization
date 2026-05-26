@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+import tiktoken
+
 Style = Literal["bullets", "paragraphs"]
 Length = Literal["short", "medium", "long"]
 
@@ -72,6 +74,28 @@ class Summarizer:
     ) -> None:
         self.model = model
         self.base_url = base_url.rstrip("/")
+
+    @property
+    def _encoder(self):
+        if not hasattr(self, "_enc"):
+            self._enc = tiktoken.get_encoding("cl100k_base")
+        return self._enc
+
+    def chunk_text(self, text: str) -> list[str]:
+        tokens = self._encoder.encode(text)
+        if len(tokens) <= self.CHUNK_SIZE:
+            return [text]
+
+        chunks: list[str] = []
+        step = self.CHUNK_SIZE - self.OVERLAP
+        start = 0
+        while start < len(tokens):
+            end = min(start + self.CHUNK_SIZE, len(tokens))
+            chunks.append(self._encoder.decode(tokens[start:end]))
+            if end == len(tokens):
+                break
+            start += step
+        return chunks
 
     def _build_prompt(
         self,

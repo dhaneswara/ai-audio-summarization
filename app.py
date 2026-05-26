@@ -71,15 +71,20 @@ def _ui_handler(
     transcribe_only: bool,
     progress=gr.Progress(),
 ):
-    """Gradio adapter: drives gr.Progress and forwards run_pipeline yields."""
-    progress(0, desc="Preparing model")
+    """Gradio adapter: drives gr.Progress and forwards run_pipeline yields.
 
-    transcribe_done = {"value": False}
+    Progress bar layout:
+      0.00 → 0.90 : transcription (driven per Whisper segment via progress_cb)
+      0.95        : summarization in progress
+      1.00        : done
+    """
+    progress(0, desc="Preparing")
 
     def cb(frac: float) -> None:
-        if not transcribe_done["value"]:
-            progress(frac, desc=f"Transcribing audio · {int(frac * 100)}%")
+        # Map Whisper's 0–1 segment progress into the 0–0.90 slice.
+        progress(frac * 0.90, desc=f"Transcribing · {int(frac * 100)}%")
 
+    yield_count = 0
     for chunk in run_pipeline(
         audio_path,
         style=style,
@@ -89,15 +94,13 @@ def _ui_handler(
         transcribe_only=transcribe_only,
         progress_cb=cb,
     ):
-        transcript, status = chunk
-        # When the transcript first appears in the left pane, transcription is
-        # complete and we can switch the progress label.
-        if transcript and not transcribe_done["value"]:
-            transcribe_done["value"] = True
-            if not transcribe_only:
-                progress(0.95, desc="Summarizing")
-            else:
-                progress(1.0, desc="Done")
+        yield_count += 1
+        transcript, _status = chunk
+        # The 2nd yield from run_pipeline is the transition point: transcription
+        # is complete, summarization (if any) is about to begin. We only switch
+        # the label when there's a real transcript AND we're going to summarize.
+        if yield_count == 2 and transcript and not transcribe_only:
+            progress(0.95, desc="Summarizing")
         yield chunk
 
     progress(1.0, desc="Done")

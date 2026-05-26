@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+.env
+.idea/
+.vscode/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+# Audio test artifacts
+*.mp3
+*.wav
+*.m4a
+*.mp4
+*.webm
+!tests/fixtures/**

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+import requests
 import tiktoken
 
 Style = Literal["bullets", "paragraphs"]
@@ -113,3 +114,32 @@ class Summarizer:
         else:
             hints["details_hint"] = hints["details_hint"] + " Use bullet points where natural."
         return _FINAL_TEMPLATE.format(transcript=transcript, **hints)
+
+    def _call_ollama(self, prompt: str) -> str:
+        url = f"{self.base_url}/api/generate"
+        try:
+            response = requests.post(
+                url,
+                json={"model": self.model, "prompt": prompt, "stream": False},
+                timeout=self.TIMEOUT_SECONDS,
+            )
+        except requests.ConnectionError as e:
+            raise SummarizerError(
+                "Ollama is not running. Start it with `ollama serve` and try again."
+            ) from e
+        except requests.Timeout as e:
+            raise SummarizerError(
+                "Ollama request timed out. Try a shorter clip or a smaller model."
+            ) from e
+
+        if response.status_code == 404:
+            raise SummarizerError(
+                f"Model `{self.model}` not found. Run `ollama pull {self.model}`."
+            )
+        if response.status_code >= 400:
+            raise SummarizerError(
+                f"Ollama returned HTTP {response.status_code}: {response.text[:200]}"
+            )
+
+        data = response.json()
+        return data.get("response", "")

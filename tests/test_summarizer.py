@@ -72,3 +72,66 @@ def test_chunk_text_chunks_have_overlap():
     head = chunks[1][:200]
     # Look for any 20-char window from tail that appears in head.
     assert any(tail[i : i + 20] in head for i in range(0, len(tail) - 20))
+
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+def _ok_response(text="ok response"):
+    r = MagicMock()
+    r.status_code = 200
+    r.json.return_value = {"response": text}
+    return r
+
+
+def test_call_ollama_posts_to_generate_endpoint():
+    from summarizer import Summarizer
+
+    s = Summarizer(base_url="http://example.com")
+    with patch("summarizer.requests.post", return_value=_ok_response("hi")) as post:
+        result = s._call_ollama("prompt")
+    assert result == "hi"
+    post.assert_called_once()
+    url = post.call_args.args[0]
+    payload = post.call_args.kwargs["json"]
+    assert url == "http://example.com/api/generate"
+    assert payload["model"] == "gemma4:e4b"
+    assert payload["prompt"] == "prompt"
+    assert payload["stream"] is False
+
+
+def test_call_ollama_raises_friendly_error_when_not_running():
+    import requests as real_requests
+    from summarizer import Summarizer, SummarizerError
+
+    s = Summarizer()
+    with patch("summarizer.requests.post", side_effect=real_requests.ConnectionError()):
+        with pytest.raises(SummarizerError) as exc:
+            s._call_ollama("prompt")
+    assert "ollama" in str(exc.value).lower()
+
+
+def test_call_ollama_raises_friendly_error_when_model_missing():
+    from summarizer import Summarizer, SummarizerError
+
+    r = MagicMock()
+    r.status_code = 404
+    r.json.return_value = {"error": "model 'gemma4:e4b' not found"}
+    with patch("summarizer.requests.post", return_value=r):
+        s = Summarizer()
+        with pytest.raises(SummarizerError) as exc:
+            s._call_ollama("prompt")
+    assert "gemma4:e4b" in str(exc.value)
+
+
+def test_call_ollama_raises_friendly_error_on_timeout():
+    import requests as real_requests
+    from summarizer import Summarizer, SummarizerError
+
+    with patch("summarizer.requests.post", side_effect=real_requests.Timeout()):
+        s = Summarizer()
+        with pytest.raises(SummarizerError) as exc:
+            s._call_ollama("prompt")
+    assert "timed out" in str(exc.value).lower()

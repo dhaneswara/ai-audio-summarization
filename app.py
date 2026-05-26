@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Generator, Optional
 
 from summarizer import Summarizer, SummarizerError
 from transcriber import Transcriber
@@ -14,43 +14,52 @@ def run_pipeline(
     length: str,
     transcriber: Transcriber,
     summarizer: Summarizer,
-) -> tuple[str, str]:
+) -> Generator[tuple[str, str], None, None]:
     """Transcribe an audio file, unload the model, then summarize.
 
-    Returns (transcript, summary_or_message). Exceptions from the summarizer are
-    caught and rendered as a user-facing message so the UI never crashes.
+    Yields intermediate (transcript, status) tuples while progressing, and a
+    final (transcript, summary) when complete. Transcriber and summarizer
+    errors are caught and surfaced as user-facing text so the UI never crashes.
     """
     if not audio_path:
-        return "", "Please upload an audio file."
+        yield "", "Please upload an audio file."
+        return
 
-    result = transcriber.transcribe(audio_path)
+    yield "Transcribing…", ""
+
+    try:
+        result = transcriber.transcribe(audio_path)
+    except Exception as e:
+        yield "", f"Transcription failed: {e}"
+        return
+
     transcript = result.text.strip()
     transcriber.unload()
 
     if not transcript:
-        return "", "No speech detected in audio."
+        yield "", "No speech detected in audio."
+        return
+
+    yield transcript, "Summarizing…"
 
     try:
         summary = summarizer.summarize(transcript, style=style, length=length)
     except SummarizerError as e:
-        return transcript, f"Summarization failed: {e}"
+        yield transcript, f"Summarization failed: {e}"
+        return
 
-    return transcript, summary
+    yield transcript, summary
 
 
 def _ui_handler(audio_path: Optional[str], style: str, length: str):
-    """Gradio adapter: wraps run_pipeline with module-level singletons and progress text."""
-    yield "Transcribing…", ""
-
-    transcript, summary = run_pipeline(
+    """Gradio adapter: forwards run_pipeline's progress yields to the UI."""
+    yield from run_pipeline(
         audio_path,
         style=style,
         length=length,
         transcriber=_TRANSCRIBER,
         summarizer=_SUMMARIZER,
     )
-
-    yield transcript, summary
 
 
 def build_ui():

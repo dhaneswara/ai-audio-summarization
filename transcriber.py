@@ -34,7 +34,7 @@ class Transcriber:
             self._model = WhisperModel(
                 self.model_size, device=self.device, compute_type=self.compute_type
             )
-        except Exception:
+        except (RuntimeError, OSError, ValueError):
             self._model = WhisperModel(
                 self.model_size, device="cpu", compute_type="int8"
             )

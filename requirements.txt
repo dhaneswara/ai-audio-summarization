@@ -3,4 +3,3 @@ gradio>=4.0.0
 requests>=2.31.0
 tiktoken>=0.5.0
 pytest>=7.0.0
-pytest-mock>=3.10.0

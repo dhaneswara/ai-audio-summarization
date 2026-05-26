@@ -52,6 +52,13 @@ class Transcriber:
             )
             self.device = "cpu"
 
+    _CUDA_ERROR_KEYWORDS = ("cublas", "cudnn", "cuda", "library", "dll")
+
+    def _is_cuda_runtime_error(self, exc: BaseException) -> bool:
+        """Detect runtime errors that mean 'GPU is unusable, retry on CPU'."""
+        msg = str(exc).lower()
+        return any(kw in msg for kw in self._CUDA_ERROR_KEYWORDS)
+
     def transcribe(
         self,
         audio_path: str,
@@ -62,8 +69,29 @@ class Transcriber:
         Faster-whisper exposes segments via a generator and the total audio
         duration on the `info` object. Each segment carries its end timestamp,
         so we can report progress as `segment.end / total_duration` as we go.
+
+        If a GPU transcription fails at runtime with a CUDA / cuBLAS / cuDNN
+        error (typical when the right CUDA libraries are not installed), the
+        model is unloaded and the transcription retried on CPU.
         """
         self._load()
+        try:
+            return self._transcribe_now(audio_path, progress_cb)
+        except Exception as e:
+            if self.device == "cpu" or not self._is_cuda_runtime_error(e):
+                raise
+            # GPU path failed mid-transcription; degrade to CPU and retry once.
+            self.unload()
+            self.device = "cpu"
+            self.compute_type = "int8"
+            self._load()
+            return self._transcribe_now(audio_path, progress_cb)
+
+    def _transcribe_now(
+        self,
+        audio_path: str,
+        progress_cb: Optional[Callable[[float], None]],
+    ) -> TranscriptionResult:
         assert self._model is not None
         segments_iter, info = self._model.transcribe(audio_path)
         duration = getattr(info, "duration", 0) or 0

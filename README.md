@@ -22,6 +22,20 @@ pip install -r requirements.txt
 
 If you have a GPU but `faster-whisper` falls back to CPU, install a CUDA-enabled build of `ctranslate2` per the [faster-whisper README](https://github.com/SYSTRAN/faster-whisper#requirements).
 
+### GPU acceleration on Windows
+
+`faster-whisper` needs cuBLAS and cuDNN at runtime. Windows installs rarely ship these in a place CTranslate2 can find them, which produces:
+
+> `Library cublas64_12.dll is not found or cannot be loaded`
+
+The simplest fix is to install the libraries via pip — no admin rights, no CUDA Toolkit needed:
+
+```powershell
+pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+```
+
+If you skip this, the app still works — it detects the missing library at transcription time and automatically retries on CPU. CPU is slower (≈3–5× slower than a 10 GB GPU for `large-v3`) but produces identical output.
+
 ## Run
 
 ```powershell
@@ -55,6 +69,7 @@ The test suite mocks `faster-whisper` and Ollama, so it runs without a GPU or a 
 | "Ollama is not running" | Start the server: `ollama serve` |
 | "Model `gemma4:e4b` not found" | Pull it: `ollama pull gemma4:e4b` |
 | GPU OOM at startup | The app falls back to CPU automatically; expect slower transcription |
+| "Library cublas64_12.dll is not found" | Install cuBLAS/cuDNN: `pip install nvidia-cublas-cu12 nvidia-cudnn-cu12`. The app falls back to CPU if you skip this. |
 | Transcript is empty | Audio likely has no speech, or the file is corrupt |
 | Slow Whisper model download | Optional: set `HF_TOKEN` to your Hugging Face read token for higher rate limits. Only matters the first time — the model is cached at `~/.cache/huggingface/hub` after that. |
 

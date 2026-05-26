@@ -121,6 +121,44 @@ def test_transcribe_reports_progress_per_segment():
     assert calls == [0.5, 1.0]
 
 
+def test_transcribe_falls_back_to_cpu_when_runtime_cuda_error():
+    """A cuBLAS/cuDNN runtime error during transcription should retry on CPU."""
+    from transcriber import Transcriber
+
+    seg = MagicMock(); seg.text = "ok"; seg.end = 1.0
+    info = MagicMock(); info.language = "en"; info.duration = 1.0
+
+    gpu_model = MagicMock()
+    gpu_model.transcribe.side_effect = RuntimeError(
+        "Library cublas64_12.dll is not found or cannot be loaded"
+    )
+    cpu_model = MagicMock()
+    cpu_model.transcribe.return_value = (iter([seg]), info)
+
+    with patch("transcriber.WhisperModel", side_effect=[gpu_model, cpu_model]) as MockModel:
+        t = Transcriber()
+        result = t.transcribe("ignored.wav")
+
+    assert result.text == "ok"
+    assert t.device == "cpu"
+    # Two constructions: the original GPU one, then the CPU retry.
+    assert MockModel.call_count == 2
+    assert MockModel.call_args_list[1].kwargs["device"] == "cpu"
+
+
+def test_transcribe_does_not_swallow_non_cuda_errors():
+    """Non-CUDA runtime errors should propagate, not trigger a CPU retry."""
+    from transcriber import Transcriber
+
+    gpu_model = MagicMock()
+    gpu_model.transcribe.side_effect = RuntimeError("audio decode failed")
+
+    with patch("transcriber.WhisperModel", return_value=gpu_model):
+        t = Transcriber()
+        with pytest.raises(RuntimeError, match="audio decode failed"):
+            t.transcribe("ignored.wav")
+
+
 def test_transcribe_without_progress_cb_still_works():
     """progress_cb is optional; transcribe must work without it."""
     from transcriber import Transcriber

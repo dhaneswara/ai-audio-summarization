@@ -100,3 +100,38 @@ def test_unload_when_not_loaded_is_safe():
 
     t = Transcriber()
     t.unload()  # should not raise
+
+
+def test_transcribe_reports_progress_per_segment():
+    """progress_cb is invoked with segment.end / duration after each segment."""
+    from transcriber import Transcriber
+
+    seg1 = MagicMock(); seg1.text = "a"; seg1.end = 5.0
+    seg2 = MagicMock(); seg2.text = "b"; seg2.end = 10.0
+    info = MagicMock(); info.language = "en"; info.duration = 10.0
+
+    fake_model = MagicMock()
+    fake_model.transcribe.return_value = (iter([seg1, seg2]), info)
+
+    calls: list[float] = []
+    with patch("transcriber.WhisperModel", return_value=fake_model):
+        t = Transcriber()
+        t.transcribe("ignored.wav", progress_cb=calls.append)
+
+    assert calls == [0.5, 1.0]
+
+
+def test_transcribe_without_progress_cb_still_works():
+    """progress_cb is optional; transcribe must work without it."""
+    from transcriber import Transcriber
+
+    seg = MagicMock(); seg.text = "hi"; seg.end = 1.0
+    info = MagicMock(); info.language = "en"; info.duration = 1.0
+    fake_model = MagicMock()
+    fake_model.transcribe.return_value = (iter([seg]), info)
+
+    with patch("transcriber.WhisperModel", return_value=fake_model):
+        t = Transcriber()
+        result = t.transcribe("ignored.wav")
+
+    assert result.text == "hi"

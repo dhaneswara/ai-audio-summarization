@@ -37,7 +37,7 @@ def test_run_pipeline_returns_transcript_and_summary():
 
     assert transcript == "hello world"
     assert summary == "## TL;DR\nA greeting."
-    transcriber.transcribe.assert_called_once_with("fake.wav")
+    transcriber.transcribe.assert_called_once_with("fake.wav", progress_cb=None)
     transcriber.unload.assert_called_once()
     summarizer.summarize.assert_called_once_with(
         "hello world", style="bullets", length="medium"
@@ -195,7 +195,7 @@ def test_run_pipeline_transcribe_only_skips_summarization():
 
     assert transcript == "just the words"
     assert "skipped" in summary.lower() or "transcription complete" in summary.lower()
-    transcriber.transcribe.assert_called_once_with("fake.wav")
+    transcriber.transcribe.assert_called_once_with("fake.wav", progress_cb=None)
     transcriber.unload.assert_called_once()
     summarizer.summarize.assert_not_called()
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from faster_whisper import WhisperModel
 
@@ -40,11 +40,26 @@ class Transcriber:
             )
             self.device = "cpu"
 
-    def transcribe(self, audio_path: str) -> TranscriptionResult:
+    def transcribe(
+        self,
+        audio_path: str,
+        progress_cb: Optional[Callable[[float], None]] = None,
+    ) -> TranscriptionResult:
+        """Transcribe audio, optionally reporting progress as a 0–1 fraction.
+
+        Faster-whisper exposes segments via a generator and the total audio
+        duration on the `info` object. Each segment carries its end timestamp,
+        so we can report progress as `segment.end / total_duration` as we go.
+        """
         self._load()
         assert self._model is not None
         segments_iter, info = self._model.transcribe(audio_path)
-        segments = list(segments_iter)
+        duration = getattr(info, "duration", 0) or 0
+        segments = []
+        for seg in segments_iter:
+            segments.append(seg)
+            if progress_cb and duration > 0:
+                progress_cb(min(seg.end / duration, 1.0))
         text = " ".join(s.text.strip() for s in segments).strip()
         return TranscriptionResult(text=text, language=info.language, segments=segments)
 

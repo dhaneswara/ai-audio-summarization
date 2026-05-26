@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Generator, Optional
+from typing import Callable, Generator, Optional
+
+import gradio as gr
 
 from summarizer import Summarizer, SummarizerError
 from transcriber import Transcriber
@@ -15,6 +17,7 @@ def run_pipeline(
     transcriber: Transcriber,
     summarizer: Summarizer,
     transcribe_only: bool = False,
+    progress_cb: Optional[Callable[[float], None]] = None,
 ) -> Generator[tuple[str, str], None, None]:
     """Transcribe an audio file, unload the model, then optionally summarize.
 
@@ -23,6 +26,9 @@ def run_pipeline(
     the summarization step is skipped — useful for verifying the transcript
     against an audio source. Transcriber and summarizer errors are caught and
     surfaced as user-facing text so the UI never crashes.
+
+    `progress_cb`, if given, is forwarded to the transcriber and called with a
+    0–1 fraction as each Whisper segment completes.
     """
     if not audio_path:
         yield "", "Please upload an audio file."
@@ -31,7 +37,7 @@ def run_pipeline(
     yield "Transcribing…", ""
 
     try:
-        result = transcriber.transcribe(audio_path)
+        result = transcriber.transcribe(audio_path, progress_cb=progress_cb)
     except Exception as e:
         yield "", f"Transcription failed: {e}"
         return
@@ -63,16 +69,38 @@ def _ui_handler(
     style: str,
     length: str,
     transcribe_only: bool,
+    progress=gr.Progress(),
 ):
-    """Gradio adapter: forwards run_pipeline's progress yields to the UI."""
-    yield from run_pipeline(
+    """Gradio adapter: drives gr.Progress and forwards run_pipeline yields."""
+    progress(0, desc="Preparing model")
+
+    transcribe_done = {"value": False}
+
+    def cb(frac: float) -> None:
+        if not transcribe_done["value"]:
+            progress(frac, desc=f"Transcribing audio · {int(frac * 100)}%")
+
+    for chunk in run_pipeline(
         audio_path,
         style=style,
         length=length,
         transcriber=_TRANSCRIBER,
         summarizer=_SUMMARIZER,
         transcribe_only=transcribe_only,
-    )
+        progress_cb=cb,
+    ):
+        transcript, status = chunk
+        # When the transcript first appears in the left pane, transcription is
+        # complete and we can switch the progress label.
+        if transcript and not transcribe_done["value"]:
+            transcribe_done["value"] = True
+            if not transcribe_only:
+                progress(0.95, desc="Summarizing")
+            else:
+                progress(1.0, desc="Done")
+        yield chunk
+
+    progress(1.0, desc="Done")
 
 
 _BUTTON_LABEL_DEFAULT = "Transcribe & Summarize"
@@ -399,9 +427,7 @@ footer { display: none !important; }
 
 
 def _make_theme():
-    """Build the Gradio theme. Imported lazily so tests don't need gradio."""
-    import gradio as gr
-
+    """Build the Gradio theme."""
     return gr.themes.Base(
         primary_hue=gr.themes.Color(
             c50="#fdf6ec", c100="#fae6c5", c200="#f5cd8a",
@@ -451,8 +477,6 @@ def _make_theme():
 
 def build_ui():
     """Construct the Gradio Blocks app. Kept as a function so tests can import it."""
-    import gradio as gr
-
     with gr.Blocks(title="Audio Summarizer") as ui:
         gr.HTML(_HEADER_HTML)
 

@@ -24,17 +24,15 @@ If you have a GPU but `faster-whisper` falls back to CPU, install a CUDA-enabled
 
 ### GPU acceleration on Windows
 
-`faster-whisper` needs cuBLAS and cuDNN at runtime. Windows installs rarely ship these in a place CTranslate2 can find them, which produces:
+`faster-whisper` needs cuBLAS and cuDNN at runtime. They're listed in `requirements.txt` as Windows-only dependencies, so `pip install -r requirements.txt` pulls them in automatically — no admin rights, no CUDA Toolkit needed.
 
-> `Library cublas64_12.dll is not found or cannot be loaded`
-
-The simplest fix is to install the libraries via pip — no admin rights, no CUDA Toolkit needed:
+`transcriber.py` registers the DLL directories at import time so CTranslate2 can find them. If you ever see `Library cublas64_12.dll is not found`, the libs likely aren't installed; run:
 
 ```powershell
 pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
 ```
 
-If you skip this, the app still works — it detects the missing library at transcription time and automatically retries on CPU. CPU is slower (≈3–5× slower than a 10 GB GPU for `large-v3`) but produces identical output.
+If you'd rather not install ~1.3 GB of CUDA libs, the app falls back to CPU at transcription time automatically. CPU is roughly 3–5× slower than a 10 GB GPU on `large-v3`, but produces identical output.
 
 ## Run
 

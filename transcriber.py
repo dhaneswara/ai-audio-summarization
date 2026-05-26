@@ -6,6 +6,8 @@ from __future__ import annotations
 # symlink warning is Windows-specific and harmless; the HF_TOKEN suggestion
 # only matters at high request volume, not for a one-time model download.
 import os
+import pathlib
+import sys
 import warnings
 
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
@@ -13,6 +15,32 @@ warnings.filterwarnings(
     "ignore",
     message=".*unauthenticated requests to the HF Hub.*",
 )
+
+
+def _register_nvidia_dll_dirs() -> None:
+    """Make the pip-installed cuBLAS/cuDNN DLLs discoverable on Windows.
+
+    `pip install nvidia-cublas-cu12 nvidia-cudnn-cu12` drops the runtime DLLs
+    under `<venv>/Lib/site-packages/nvidia/{cublas,cudnn}/bin/`. CTranslate2
+    does not look there on its own, so without this call faster-whisper fails
+    on Windows with 'Library cublas64_12.dll is not found' even when the
+    packages are installed. The hook is a no-op if the packages aren't
+    present or we're not on Windows.
+    """
+    if sys.platform != "win32":
+        return
+    for pkg_name in ("cublas", "cudnn"):
+        try:
+            pkg = __import__(f"nvidia.{pkg_name}", fromlist=[pkg_name])
+        except ImportError:
+            continue
+        for entry in pkg.__path__:
+            bin_dir = pathlib.Path(entry) / "bin"
+            if bin_dir.is_dir():
+                os.add_dll_directory(str(bin_dir))
+
+
+_register_nvidia_dll_dirs()
 
 from dataclasses import dataclass
 from typing import Callable, Optional

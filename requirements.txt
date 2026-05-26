@@ -3,3 +3,7 @@ gradio>=4.0.0
 requests>=2.31.0
 tiktoken>=0.5.0
 pytest>=7.0.0
+# Windows users: install these for GPU acceleration. The app falls back to
+# CPU automatically if they're missing, but transcription is 3-5x slower.
+nvidia-cublas-cu12; sys_platform == "win32"
+nvidia-cudnn-cu12; sys_platform == "win32"

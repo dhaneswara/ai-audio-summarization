@@ -255,6 +255,17 @@ label.svelte-1b6s6s span,
     font-family: 'JetBrains Mono', ui-monospace, monospace !important;
 }
 
+/* Radio group: pointer cursor everywhere on the option pills and dots. */
+#controls-row label,
+#controls-row input[type="radio"] {
+    cursor: pointer !important;
+}
+
+/* Amber selected accent on the radio dot. */
+#controls-row input[type="radio"] {
+    accent-color: #e89745;
+}
+
 .gradio-container select:focus,
 .gradio-container input:focus,
 .gradio-container textarea:focus {
@@ -501,11 +512,15 @@ def build_ui():
         )
 
         with gr.Row(elem_id="controls-row"):
-            style = gr.Dropdown(
-                ["bullets", "paragraphs"], value="bullets", label="Summary style"
+            style = gr.Radio(
+                ["bullets", "paragraphs"],
+                value="bullets",
+                label="Summary style",
             )
-            length = gr.Dropdown(
-                ["short", "medium", "long"], value="medium", label="Summary length"
+            length = gr.Radio(
+                ["short", "medium", "long"],
+                value="medium",
+                label="Summary length",
             )
 
         with gr.Row(elem_id="transcribe-only-row"):

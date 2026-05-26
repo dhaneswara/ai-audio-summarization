@@ -351,14 +351,24 @@ button#submit-btn:active { transform: translateY(0); }
     overflow-y: auto !important;
 }
 
-#transcript-pane textarea {
-    background: transparent !important;
-    border: none !important;
+/* Inner textareas — same treatment in both panes so they read as a pair. */
+#transcript-pane textarea,
+#summary-pane textarea {
+    background: #0f0d0a !important;
+    border: 1px solid #2a241d !important;
+    border-radius: 4px !important;
     color: #f0e9d8 !important;
     font-family: 'JetBrains Mono', ui-monospace, monospace !important;
     font-size: 0.88rem !important;
     line-height: 1.65 !important;
-    padding: 0 !important;
+    padding: 0.75rem !important;
+}
+
+#transcript-pane textarea:focus,
+#summary-pane textarea:focus {
+    border-color: #e89745 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(232, 151, 69, 0.12) !important;
 }
 
 #summary-pane {

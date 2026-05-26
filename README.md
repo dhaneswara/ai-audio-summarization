@@ -40,17 +40,29 @@ If you'd rather not install ~1.3 GB of CUDA libs, the app falls back to CPU at t
 python app.py
 ```
 
-Open the URL Gradio prints (typically http://127.0.0.1:7860). Upload an audio file, pick a summary style and length, and click **Transcribe & Summarize**.
-
-Tick **Transcribe only (skip summary)** if you just want the transcript — handy for sanity-checking what the model heard before trusting any summary built from it.
+Open the URL Gradio prints (typically http://127.0.0.1:7860). Upload an audio file, pick a summary style and length, and click **Transcribe & Summarize**. A progress bar tracks each Whisper segment as it lands.
 
 Supported formats: `.mp3`, `.wav`, `.m4a`, `.mp4`, `.webm`, `.ogg`, `.flac`.
 
+### UI options
+
+- **Summary style** — `bullets` or `paragraphs`. Affects the *Notable Details* section of the summary.
+- **Summary length** — `short` / `medium` / `long`. Tunes the TL;DR length and the number of key-point bullets.
+- **Transcribe only — skip summarization** — runs Whisper but leaves Ollama untouched. Useful for sanity-checking the transcript before trusting any summary built from it. The submit button label switches to **Transcribe Only** when this is on.
+- **Higher accuracy · slower** — bundles three Whisper accuracy tweaks:
+  - `vad_filter=True` (Silero VAD strips silence segments to prevent hallucinations on quiet stretches)
+  - `beam_size=10` (wider decoding search, vs. the default 5)
+  - `compute_type=float16` (full half-precision instead of int8_float16; uses ~5 GB VRAM instead of ~3 GB)
+
+  Roughly 2× slower in exchange for cleaner output. Flipping the checkbox triggers a one-time model reload (~10–30 s on GPU) to switch compute types; subsequent runs in the same mode reuse the loaded model.
+
 ## How it works
 
-1. **Transcribe** — `faster-whisper` `large-v3` (int8_float16) runs on the GPU (~3 GB VRAM).
-2. **Unload** — the Whisper model is released and CUDA cache is emptied.
-3. **Summarize** — the transcript is sent to Ollama (`gemma4:e4b`, ~9.6 GB VRAM). For long transcripts a map-reduce pass chunks the text at ~6000 tokens with 200-token overlap, summarizes each chunk, and then combines them into a structured final summary.
+1. **Transcribe** — `faster-whisper` `large-v3` (`int8_float16` by default, or `float16` in higher-accuracy mode) runs on the GPU (~3 GB / ~5 GB VRAM respectively). Progress is reported per Whisper segment via `segment.end / total_duration`.
+2. **Unload** — the Whisper model is released and the CUDA cache is emptied so it doesn't compete with Ollama for VRAM.
+3. **Summarize** — the transcript is sent to Ollama (`gemma4:e4b`, ~9.6 GB VRAM). For long transcripts a map-reduce pass chunks the text at ~6 000 tokens with 200-token overlap, summarizes each chunk, then combines them into a structured final summary (`## TL;DR` / `## Key Points` / `## Notable Details`).
+
+If GPU transcription fails at runtime (typically a missing cuBLAS/cuDNN library), the Transcriber unloads, re-loads on CPU with `compute_type=int8`, and retries automatically — the user sees the same flow, just slower.
 
 ## Tests
 

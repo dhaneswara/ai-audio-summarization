@@ -37,7 +37,9 @@ def test_run_pipeline_returns_transcript_and_summary():
 
     assert transcript == "hello world"
     assert summary == "## TL;DR\nA greeting."
-    transcriber.transcribe.assert_called_once_with("fake.wav", progress_cb=None)
+    transcriber.transcribe.assert_called_once_with(
+        "fake.wav", progress_cb=None, high_quality=False
+    )
     transcriber.unload.assert_called_once()
     summarizer.summarize.assert_called_once_with(
         "hello world", style="bullets", length="medium"
@@ -195,9 +197,39 @@ def test_run_pipeline_transcribe_only_skips_summarization():
 
     assert transcript == "just the words"
     assert "skipped" in summary.lower() or "transcription complete" in summary.lower()
-    transcriber.transcribe.assert_called_once_with("fake.wav", progress_cb=None)
+    transcriber.transcribe.assert_called_once_with(
+        "fake.wav", progress_cb=None, high_quality=False
+    )
     transcriber.unload.assert_called_once()
     summarizer.summarize.assert_not_called()
+
+
+def test_run_pipeline_forwards_high_quality_to_transcriber():
+    """high_quality flag must reach Transcriber.transcribe."""
+    from app import run_pipeline
+    from transcriber import TranscriptionResult
+
+    transcriber = MagicMock()
+    transcriber.transcribe.return_value = TranscriptionResult(
+        text="hi", language="en", segments=[]
+    )
+    summarizer = MagicMock()
+    summarizer.summarize.return_value = "summary"
+
+    _drain(
+        run_pipeline(
+            "fake.wav",
+            style="bullets",
+            length="medium",
+            transcriber=transcriber,
+            summarizer=summarizer,
+            high_quality=True,
+        )
+    )
+
+    transcriber.transcribe.assert_called_once_with(
+        "fake.wav", progress_cb=None, high_quality=True
+    )
 
 
 def test_run_pipeline_yields_progress_between_stages():

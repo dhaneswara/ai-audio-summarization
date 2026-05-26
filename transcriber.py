@@ -56,6 +56,13 @@ class TranscriptionResult:
 
 
 class Transcriber:
+    # Compute-type per quality mode. Float16 keeps the model in full half
+    # precision and is slightly more accurate than int8_float16, at the cost
+    # of ~5 GB VRAM instead of ~3 GB — fine on a 10 GB card since Ollama is
+    # unloaded by the time we transcribe.
+    _COMPUTE_TYPE_DEFAULT = "int8_float16"
+    _COMPUTE_TYPE_HIGH_QUALITY = "float16"
+
     def __init__(
         self,
         model_size: str = "large-v3",
@@ -87,10 +94,23 @@ class Transcriber:
         msg = str(exc).lower()
         return any(kw in msg for kw in self._CUDA_ERROR_KEYWORDS)
 
+    def _ensure_compute_type(self, desired: str) -> None:
+        """Reload the model on `desired` compute_type if it's not already loaded that way."""
+        if self.device != "cuda":
+            # On CPU we always use int8 regardless of mode.
+            return
+        if self._model is not None and self.compute_type == desired:
+            return
+        if self._model is not None:
+            self.unload()
+        self.compute_type = desired
+        self._load()
+
     def transcribe(
         self,
         audio_path: str,
         progress_cb: Optional[Callable[[float], None]] = None,
+        high_quality: bool = False,
     ) -> TranscriptionResult:
         """Transcribe audio, optionally reporting progress as a 0–1 fraction.
 
@@ -98,13 +118,22 @@ class Transcriber:
         duration on the `info` object. Each segment carries its end timestamp,
         so we can report progress as `segment.end / total_duration` as we go.
 
+        When `high_quality` is True the model is (re)loaded with float16
+        compute, voice-activity-detection silence filtering is enabled, and
+        beam search is widened to 10. Expect ~2× transcription time in
+        exchange for cleaner output and fewer hallucinations.
+
         If a GPU transcription fails at runtime with a CUDA / cuBLAS / cuDNN
         error (typical when the right CUDA libraries are not installed), the
         model is unloaded and the transcription retried on CPU.
         """
+        desired_ct = (
+            self._COMPUTE_TYPE_HIGH_QUALITY if high_quality else self._COMPUTE_TYPE_DEFAULT
+        )
+        self._ensure_compute_type(desired_ct)
         self._load()
         try:
-            return self._transcribe_now(audio_path, progress_cb)
+            return self._transcribe_now(audio_path, progress_cb, high_quality)
         except Exception as e:
             if self.device == "cpu" or not self._is_cuda_runtime_error(e):
                 raise
@@ -113,15 +142,20 @@ class Transcriber:
             self.device = "cpu"
             self.compute_type = "int8"
             self._load()
-            return self._transcribe_now(audio_path, progress_cb)
+            return self._transcribe_now(audio_path, progress_cb, high_quality)
 
     def _transcribe_now(
         self,
         audio_path: str,
         progress_cb: Optional[Callable[[float], None]],
+        high_quality: bool = False,
     ) -> TranscriptionResult:
         assert self._model is not None
-        segments_iter, info = self._model.transcribe(audio_path)
+        kwargs = {}
+        if high_quality:
+            kwargs["vad_filter"] = True
+            kwargs["beam_size"] = 10
+        segments_iter, info = self._model.transcribe(audio_path, **kwargs)
         duration = getattr(info, "duration", 0) or 0
         segments = []
         for seg in segments_iter:

@@ -17,6 +17,7 @@ def run_pipeline(
     transcriber: Transcriber,
     summarizer: Summarizer,
     transcribe_only: bool = False,
+    high_quality: bool = False,
     progress_cb: Optional[Callable[[float], None]] = None,
 ) -> Generator[tuple[str, str], None, None]:
     """Transcribe an audio file, unload the model, then optionally summarize.
@@ -37,7 +38,9 @@ def run_pipeline(
     yield "Transcribing…", ""
 
     try:
-        result = transcriber.transcribe(audio_path, progress_cb=progress_cb)
+        result = transcriber.transcribe(
+            audio_path, progress_cb=progress_cb, high_quality=high_quality
+        )
     except Exception as e:
         yield "", f"Transcription failed: {e}"
         return
@@ -69,6 +72,7 @@ def _ui_handler(
     style: str,
     length: str,
     transcribe_only: bool,
+    high_quality: bool,
     progress=gr.Progress(),
 ):
     """Gradio adapter: drives gr.Progress and forwards run_pipeline yields.
@@ -92,6 +96,7 @@ def _ui_handler(
         transcriber=_TRANSCRIBER,
         summarizer=_SUMMARIZER,
         transcribe_only=transcribe_only,
+        high_quality=high_quality,
         progress_cb=cb,
     ):
         yield_count += 1
@@ -274,24 +279,30 @@ label.svelte-1b6s6s span,
     box-shadow: 0 0 0 3px rgba(232, 151, 69, 0.12) !important;
 }
 
-/* ---------- Checkbox row ---------- */
-#transcribe-only-row { margin: 0.5rem 0 1.5rem 0 !important; }
+/* ---------- Checkbox rows ---------- */
+#transcribe-only-row { margin: 0.5rem 0 0.25rem 0 !important; }
+#high-quality-row { margin: 0 0 1.5rem 0 !important; }
 
 #transcribe-only-row .checkbox-wrap,
-#transcribe-only-row label {
+#transcribe-only-row label,
+#high-quality-row .checkbox-wrap,
+#high-quality-row label {
     background: transparent !important;
     border: none !important;
     padding: 0 !important;
 }
 
-#transcribe-only-row input[type="checkbox"] {
+#transcribe-only-row input[type="checkbox"],
+#high-quality-row input[type="checkbox"] {
     accent-color: #e89745 !important;
     width: 16px !important;
     height: 16px !important;
 }
 
 #transcribe-only-row .label-wrap > span,
-#transcribe-only-row label > span {
+#transcribe-only-row label > span,
+#high-quality-row .label-wrap > span,
+#high-quality-row label > span {
     color: #d6cdb4 !important;
     text-transform: none !important;
     letter-spacing: 0.01em !important;
@@ -300,7 +311,9 @@ label.svelte-1b6s6s span,
 }
 
 #transcribe-only-row .info-text,
-#transcribe-only-row .gr-info {
+#transcribe-only-row .gr-info,
+#high-quality-row .info-text,
+#high-quality-row .gr-info {
     font-family: 'Fraunces', serif !important;
     font-size: 0.95rem !important;
     color: #8a8170 !important;
@@ -445,7 +458,8 @@ footer { display: none !important; }
 #audio-upload { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: 0.18s; }
 #controls-row { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: 0.26s; }
 #transcribe-only-row { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: 0.32s; }
-#submit-row { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: 0.38s; }
+#high-quality-row { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: 0.36s; }
+#submit-row { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: 0.42s; }
 #output-grid { animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: 0.46s; }
 """
 
@@ -530,6 +544,13 @@ def build_ui():
                 info="Use this to verify the transcript before generating a summary.",
             )
 
+        with gr.Row(elem_id="high-quality-row"):
+            high_quality = gr.Checkbox(
+                value=False,
+                label="Higher accuracy · slower",
+                info="Enables VAD silence filtering, beam_size=10, and float16 compute. Cleaner transcripts but roughly 2× slower.",
+            )
+
         with gr.Row(elem_id="submit-row"):
             submit = gr.Button(
                 _BUTTON_LABEL_DEFAULT,
@@ -570,7 +591,7 @@ def build_ui():
 
         submit.click(
             _ui_handler,
-            inputs=[audio, style, length, transcribe_only],
+            inputs=[audio, style, length, transcribe_only, high_quality],
             outputs=[transcript_box, summary_box],
         )
     return ui

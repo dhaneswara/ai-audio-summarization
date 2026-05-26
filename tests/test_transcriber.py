@@ -146,6 +146,65 @@ def test_transcribe_falls_back_to_cpu_when_runtime_cuda_error():
     assert MockModel.call_args_list[1].kwargs["device"] == "cpu"
 
 
+def test_transcribe_high_quality_sets_vad_and_beam_size():
+    """high_quality=True forwards vad_filter=True and beam_size=10 to the model."""
+    from transcriber import Transcriber
+
+    seg = MagicMock(); seg.text = "x"; seg.end = 1.0
+    info = MagicMock(); info.language = "en"; info.duration = 1.0
+    fake_model = MagicMock()
+    fake_model.transcribe.return_value = (iter([seg]), info)
+
+    with patch("transcriber.WhisperModel", return_value=fake_model):
+        t = Transcriber()
+        t.transcribe("ignored.wav", high_quality=True)
+
+    fake_model.transcribe.assert_called_once()
+    kwargs = fake_model.transcribe.call_args.kwargs
+    assert kwargs.get("vad_filter") is True
+    assert kwargs.get("beam_size") == 10
+
+
+def test_transcribe_default_quality_passes_no_extra_kwargs():
+    """high_quality=False (default) keeps the call vanilla so faster-whisper uses its own defaults."""
+    from transcriber import Transcriber
+
+    seg = MagicMock(); seg.text = "x"; seg.end = 1.0
+    info = MagicMock(); info.language = "en"; info.duration = 1.0
+    fake_model = MagicMock()
+    fake_model.transcribe.return_value = (iter([seg]), info)
+
+    with patch("transcriber.WhisperModel", return_value=fake_model):
+        t = Transcriber()
+        t.transcribe("ignored.wav")
+
+    kwargs = fake_model.transcribe.call_args.kwargs
+    assert "vad_filter" not in kwargs
+    assert "beam_size" not in kwargs
+
+
+def test_transcribe_high_quality_reloads_model_in_float16():
+    """Switching to high_quality on GPU should reload the model with compute_type=float16."""
+    from transcriber import Transcriber
+
+    seg = MagicMock(); seg.text = "x"; seg.end = 1.0
+    info = MagicMock(); info.language = "en"; info.duration = 1.0
+    default_model = MagicMock()
+    default_model.transcribe.return_value = (iter([seg]), info)
+    hq_model = MagicMock()
+    hq_model.transcribe.return_value = (iter([seg]), info)
+
+    with patch("transcriber.WhisperModel", side_effect=[default_model, hq_model]) as MockModel:
+        t = Transcriber(device="cuda")
+        t.transcribe("first.wav")  # loads with int8_float16
+        t.transcribe("second.wav", high_quality=True)  # should reload with float16
+
+    assert MockModel.call_count == 2
+    assert MockModel.call_args_list[0].kwargs["compute_type"] == "int8_float16"
+    assert MockModel.call_args_list[1].kwargs["compute_type"] == "float16"
+    assert t.compute_type == "float16"
+
+
 def test_transcribe_does_not_swallow_non_cuda_errors():
     """Non-CUDA runtime errors should propagate, not trigger a CPU retry."""
     from transcriber import Transcriber

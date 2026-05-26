@@ -56,6 +56,7 @@ The test suite mocks `faster-whisper` and Ollama, so it runs without a GPU or a 
 | "Model `gemma4:e4b` not found" | Pull it: `ollama pull gemma4:e4b` |
 | GPU OOM at startup | The app falls back to CPU automatically; expect slower transcription |
 | Transcript is empty | Audio likely has no speech, or the file is corrupt |
+| Slow Whisper model download | Optional: set `HF_TOKEN` to your Hugging Face read token for higher rate limits. Only matters the first time — the model is cached at `~/.cache/huggingface/hub` after that. |
 
 ## Project layout
 

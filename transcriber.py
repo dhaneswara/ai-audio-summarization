@@ -2,6 +2,18 @@
 
 from __future__ import annotations
 
+# Silence huggingface_hub noise *before* faster_whisper imports it. The
+# symlink warning is Windows-specific and harmless; the HF_TOKEN suggestion
+# only matters at high request volume, not for a one-time model download.
+import os
+import warnings
+
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+warnings.filterwarnings(
+    "ignore",
+    message=".*unauthenticated requests to the HF Hub.*",
+)
+
 from dataclasses import dataclass
 from typing import Callable, Optional
 
